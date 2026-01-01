@@ -1,0 +1,1 @@
+ALTER TABLE "published_properties" ALTER COLUMN "slug" DROP NOT NULL;
