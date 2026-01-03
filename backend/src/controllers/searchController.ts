@@ -471,7 +471,7 @@ export const searchProperties = async (req: Request, res: Response): Promise<any
             locality, 
             state,
             pincode,
-            propertyType,
+            propertyTypes, // Changed from propertyType to propertyTypes
             minPrice,
             maxPrice,
             bedrooms,
@@ -481,6 +481,12 @@ export const searchProperties = async (req: Request, res: Response): Promise<any
             page = 1,
             limit = 20
         } = req.query;
+
+        console.log('Search request received:');
+        console.log('Query params:', req.query);
+        console.log('Property types:', propertyTypes);
+        console.log('Bedrooms:', bedrooms);
+        console.log('Bathrooms:', bathrooms);
 
         let whereConditions = [eq(publishedProperties.isLive, true)];
         let coordinateBasedProperties: any[] = [];
@@ -585,11 +591,55 @@ export const searchProperties = async (req: Request, res: Response): Promise<any
         }
 
         // Apply other filters
-        if (propertyType) whereConditions.push(eq(publishedProperties.propertyType, propertyType as string));
+        
+        // Handle multiple property types (array)
+        if (propertyTypes) {
+            const propertyTypesList = Array.isArray(propertyTypes) ? propertyTypes : [propertyTypes];
+            // Only apply filter if array is not empty (empty array means "All" is selected)
+            if (propertyTypesList.length > 0 && propertyTypesList.some(type => type && typeof type === 'string' && type.trim())) {
+                const validTypes = propertyTypesList.filter(type => type && typeof type === 'string' && type.trim());
+                if (validTypes.length > 0) {
+                    const propertyTypeConditions = validTypes.map(type => 
+                        eq(publishedProperties.propertyType, type as string)
+                    );
+                    whereConditions.push(sql`(${sql.join(propertyTypeConditions, sql` OR `)})`);
+                }
+            }
+        }
+        
         if (minPrice) whereConditions.push(sql`${publishedProperties.sellingPrice}::numeric >= ${Number(minPrice)}`);
         if (maxPrice) whereConditions.push(sql`${publishedProperties.sellingPrice}::numeric <= ${Number(maxPrice)}`);
-        if (bedrooms) whereConditions.push(eq(publishedProperties.bedrooms, bedrooms as string));
-        if (bathrooms) whereConditions.push(eq(publishedProperties.bathrooms, bathrooms as string));
+        
+        // Handle multiple bedrooms (array)
+        if (bedrooms) {
+            const bedroomsList = Array.isArray(bedrooms) ? bedrooms : [bedrooms];
+            // Only apply filter if array is not empty
+            if (bedroomsList.length > 0 && bedroomsList.some(bedroom => bedroom && typeof bedroom === 'string' && bedroom.trim())) {
+                const validBedrooms = bedroomsList.filter(bedroom => bedroom && typeof bedroom === 'string' && bedroom.trim());
+                if (validBedrooms.length > 0) {
+                    const bedroomConditions = validBedrooms.map(bedroom => 
+                        eq(publishedProperties.bedrooms, bedroom as string)
+                    );
+                    whereConditions.push(sql`(${sql.join(bedroomConditions, sql` OR `)})`);
+                }
+            }
+        }
+        
+        // Handle multiple bathrooms (array)
+        if (bathrooms) {
+            const bathroomsList = Array.isArray(bathrooms) ? bathrooms : [bathrooms];
+            // Only apply filter if array is not empty
+            if (bathroomsList.length > 0 && bathroomsList.some(bathroom => bathroom && typeof bathroom === 'string' && bathroom.trim())) {
+                const validBathrooms = bathroomsList.filter(bathroom => bathroom && typeof bathroom === 'string' && bathroom.trim());
+                if (validBathrooms.length > 0) {
+                    const bathroomConditions = validBathrooms.map(bathroom => 
+                        eq(publishedProperties.bathrooms, bathroom as string)
+                    );
+                    whereConditions.push(sql`(${sql.join(bathroomConditions, sql` OR `)})`);
+                }
+            }
+        }
+        
         if (minArea) whereConditions.push(sql`${publishedProperties.totalArea}::numeric >= ${Number(minArea)}`);
         if (maxArea) whereConditions.push(sql`${publishedProperties.totalArea}::numeric <= ${Number(maxArea)}`);
 
@@ -609,11 +659,32 @@ export const searchProperties = async (req: Request, res: Response): Promise<any
         if (coordinateBasedProperties.length > 0) {
             filteredCoordinateResults = coordinateBasedProperties.filter((property: any) => {
                 // Apply the same filters as text-based search
-                if (propertyType && property.propertyType !== propertyType) return false;
+                if (propertyTypes) {
+                    const propertyTypesList = Array.isArray(propertyTypes) ? propertyTypes : [propertyTypes];
+                    const validTypes = propertyTypesList.filter(type => type && typeof type === 'string' && type.trim());
+                    if (validTypes.length > 0 && !validTypes.includes(property.propertyType)) {
+                        return false;
+                    }
+                }
                 if (minPrice && Number(property.sellingPrice) < Number(minPrice)) return false;
                 if (maxPrice && Number(property.sellingPrice) > Number(maxPrice)) return false;
-                if (bedrooms && property.bedrooms !== bedrooms) return false;
-                if (bathrooms && property.bathrooms !== bathrooms) return false;
+                
+                if (bedrooms) {
+                    const bedroomsList = Array.isArray(bedrooms) ? bedrooms : [bedrooms];
+                    const validBedrooms = bedroomsList.filter(bedroom => bedroom && typeof bedroom === 'string' && bedroom.trim());
+                    if (validBedrooms.length > 0 && !validBedrooms.includes(property.bedrooms)) {
+                        return false;
+                    }
+                }
+                
+                if (bathrooms) {
+                    const bathroomsList = Array.isArray(bathrooms) ? bathrooms : [bathrooms];
+                    const validBathrooms = bathroomsList.filter(bathroom => bathroom && typeof bathroom === 'string' && bathroom.trim());
+                    if (validBathrooms.length > 0 && !validBathrooms.includes(property.bathrooms)) {
+                        return false;
+                    }
+                }
+                
                 if (minArea && Number(property.totalArea) < Number(minArea)) return false;
                 if (maxArea && Number(property.totalArea) > Number(maxArea)) return false;
                 return true;
@@ -663,7 +734,7 @@ export const searchProperties = async (req: Request, res: Response): Promise<any
                 city: city || null,
                 locality: locality || null,
                 state: state || null,
-                propertyType: propertyType || null,
+                propertyTypes: propertyTypes || null,
                 priceRange: { min: minPrice || null, max: maxPrice || null },
                 bedrooms: bedrooms || null,
                 bathrooms: bathrooms || null,

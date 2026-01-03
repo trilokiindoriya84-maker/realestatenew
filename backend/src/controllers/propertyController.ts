@@ -188,8 +188,42 @@ export const uploadPropertyFiles = async (req: AuthRequest, res: Response): Prom
             uploadedUrls.push(url);
         }
 
+        // **FIX: Save document URLs to database**
+        if (uploadedUrls.length > 0) {
+            const updateData: any = {};
+            
+            // Map folder names to database fields
+            const folderToFieldMap: Record<string, string> = {
+                'propertyPhotos': 'propertyPhotos',
+                'ownership': 'ownershipDocs',
+                'saleDeed': 'saleDeedDocs',
+                'khasra': 'khasraDocs',
+                'approvedMap': 'approvedMapDocs',
+                'encumbrance': 'encumbranceDocs',
+                'identityProof': 'identityProofDocs',
+            };
+
+            const dbField = folderToFieldMap[folder];
+            if (dbField) {
+                // Get existing URLs for this document type
+                const existingUrls = (property as any)[dbField] || [];
+                
+                // Combine existing URLs with new ones
+                const combinedUrls = [...existingUrls, ...uploadedUrls];
+                updateData[dbField] = combinedUrls;
+
+                // Update property with new document URLs
+                await propertyService.updatePropertyByUniqueId(propertyUniqueId, updateData);
+                
+                console.log(`Updated property ${propertyUniqueId} with ${uploadedUrls.length} new ${folder} documents`);
+            }
+        }
+
         console.log(`Files uploaded successfully by ${isAdmin ? 'admin' : 'owner'}: ${uploadedUrls.length} files`);
-        return res.status(200).json({ urls: uploadedUrls });
+        return res.status(200).json({ 
+            urls: uploadedUrls,
+            message: 'Files uploaded and saved to database successfully'
+        });
     } catch (error) {
         console.error('Upload files error:', error);
         return res.status(500).json({ message: 'Failed to upload files' });
